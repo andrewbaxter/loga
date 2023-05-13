@@ -1,11 +1,11 @@
 [package]
-name = "logerr"
+name = "loga"
 version = "0.1.0"
 edition = "2021"
 description = "Combined logging and error handling"
 license = "ISC"
 readme = "readme.md"
-repository = "https://github.com/andrewbaxter/logerr"
+repository = "https://github.com/andrewbaxter/loga"
 
 [dependencies]
 chrono = "0.4.24"
