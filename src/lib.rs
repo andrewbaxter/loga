@@ -30,6 +30,17 @@ impl Display for Level {
     }
 }
 
+impl Level {
+    pub fn priority(&self) -> i8 {
+        match self {
+            Level::Debug => 10,
+            Level::Info => 20,
+            Level::Warn => 30,
+            Level::Error => 40,
+        }
+    }
+}
+
 /// A comprehensive structural error type, intended exclusively for human
 /// consumption.
 #[derive(Debug, Clone)]
@@ -103,23 +114,33 @@ pub fn errors(message: &'static str, es: Vec<Error>) -> Error {
 /// generated during this context.
 #[derive(Clone)]
 pub struct Log {
+    filter_priority: i8,
     attrs: HashMap<&'static str, String>,
 }
 
 impl Log {
-    pub fn new() -> Self {
-        Self { attrs: HashMap::new() }
+    pub fn new(level: Level) -> Self {
+        Self {
+            filter_priority: level.priority(),
+            attrs: HashMap::new(),
+        }
     }
 
     #[doc(hidden)]
     pub fn fork(&self, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Self {
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
-        return Log { attrs: new_attrs };
+        return Log {
+            filter_priority: self.filter_priority,
+            attrs: new_attrs,
+        };
     }
 
     #[doc(hidden)]
     pub fn print(&self, l: Level, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
+        if l.priority() < self.filter_priority {
+            return;
+        }
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
 
