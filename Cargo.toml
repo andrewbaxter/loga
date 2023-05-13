@@ -1,0 +1,11 @@
+[package]
+name = "logerr"
+version = "0.1.0"
+edition = "2021"
+description = "Combined logging and error handling"
+license = "ISC"
+readme = "readme.md"
+repository = "https://github.com/andrewbaxter/logerr"
+
+[dependencies]
+chrono = "0.4.24"
