@@ -199,7 +199,7 @@ macro_rules! log{
 /// Log at the debug level.  Use like `log_debug!(log, key=value, ...);`. Values
 /// must have the method `to_string()`.
 #[macro_export]
-macro_rules! debug{
+macro_rules! log_debug{
     ($l: expr, $m: literal $(, $k: ident = $v: expr) *) => {
         $crate:: log !($l, $crate:: Level:: Debug, $m $(, $k = $v) *)
     };
