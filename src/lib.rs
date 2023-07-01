@@ -1,8 +1,14 @@
 use chrono::Local;
 use console::Style;
+use textwrap::{
+    wrap,
+    Options,
+};
 use std::{
     collections::HashMap,
-    fmt::Display,
+    fmt::{
+        Display,
+    },
     process::exit,
 };
 
@@ -79,20 +85,72 @@ pub struct Error_ {
 #[derive(Debug, Clone)]
 pub struct Error(Box<Error_>);
 
-impl Error {
-    pub fn new(message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
-        let mut new_attrs = HashMap::new();
-        attrs(&mut new_attrs);
-        return Error(Box::new(Error_ {
-            inner: Error_2::Full(FullError {
-                message: message,
-                attrs: new_attrs,
-                causes: vec![],
-            }),
-            incidental: vec![],
-        }));
-    }
+enum RenderNode {
+    Leaf(String),
+    KVLeaf(String, String),
+    BlankLeaf,
+    Branch(Vec<RenderNode>),
+}
 
+/// Create a new error. If you want to inherit attributes from a logging context,
+/// see `Log::new_err`.
+pub fn err(message: &'static str) -> Error {
+    return Error(Box::new(Error_ {
+        inner: Error_2::Full(FullError {
+            message: message,
+            attrs: HashMap::new(),
+            causes: vec![],
+        }),
+        incidental: vec![],
+    }));
+}
+
+/// Create a new error and attach attributes. If you want to inherit attributes
+/// from a logging context, see `Log::new_err`.
+pub fn err_with(message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+    let mut new_attrs = HashMap::new();
+    attrs(&mut new_attrs);
+    return Error(Box::new(Error_ {
+        inner: Error_2::Full(FullError {
+            message: message,
+            attrs: new_attrs,
+            causes: vec![],
+        }),
+        incidental: vec![],
+    }));
+}
+
+/// Create an error from multiple errors
+pub fn agg_err(message: &'static str, errs: Vec<Error>) -> Error {
+    return Error(Box::new(Error_ {
+        inner: Error_2::Full(FullError {
+            message: message,
+            attrs: HashMap::new(),
+            causes: errs,
+        }),
+        incidental: vec![],
+    }));
+}
+
+/// Create an error from multiple errors, attaching attributes
+pub fn agg_err_with(
+    message: &'static str,
+    errs: Vec<Error>,
+    attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
+) -> Error {
+    let mut new_attrs = HashMap::new();
+    attrs(&mut new_attrs);
+    return Error(Box::new(Error_ {
+        inner: Error_2::Full(FullError {
+            message: message,
+            attrs: new_attrs,
+            causes: errs,
+        }),
+        incidental: vec![],
+    }));
+}
+
+impl Error {
     pub fn from(x: impl Display) -> Error {
         return Error(Box::new(Error_ {
             inner: Error_2::Simple(x.to_string()),
@@ -106,6 +164,87 @@ impl Error {
         self.0.incidental.push(incidental);
         return self;
     }
+
+    fn render(&self) -> (String, RenderNode) {
+        let message;
+        let mut children = vec![];
+        let highlight_style = Style::new().for_stderr().blue();
+        let dark_style = Style::new().for_stderr().dim();
+        match &self.0.inner {
+            Error_2::Simple(e) => {
+                message = e.clone();
+            },
+            Error_2::Full(e) => {
+                message = e.message.to_string();
+                for a in &e.attrs {
+                    children.push(RenderNode::BlankLeaf);
+                    children.push(
+                        RenderNode::KVLeaf(
+                            dark_style.apply_to(format!("{} = ", a.0)).to_string(),
+                            dark_style.apply_to(a.1).to_string(),
+                        ),
+                    )
+                }
+                if e.causes.len() > 0 {
+                    children.push(RenderNode::BlankLeaf);
+                    children.push(RenderNode::Leaf(highlight_style.apply_to("Caused by:").to_string()));
+                    for (i, e) in e.causes.iter().enumerate() {
+                        if i > 0 {
+                            children.push(RenderNode::BlankLeaf);
+                        }
+                        let (head, body) = e.render();
+                        children.push(RenderNode::Branch(vec![RenderNode::KVLeaf("- ".to_string(), head), body]));
+                    }
+                }
+            },
+        }
+        if self.0.incidental.len() > 0 {
+            children.push(RenderNode::BlankLeaf);
+            children.push(RenderNode::Leaf("Incidentally:".to_string()));
+            for (i, e) in self.0.incidental.iter().enumerate() {
+                if i > 0 {
+                    children.push(RenderNode::BlankLeaf);
+                }
+                let (head, body) = e.render();
+                children.push(RenderNode::Branch(vec![RenderNode::KVLeaf("- ".to_string(), head), body]));
+            }
+        }
+        return (message, RenderNode::Branch(children));
+    }
+}
+
+fn render(root: RenderNode) -> String {
+    let mut out = String::new();
+    let mut stack = vec![(0usize, &root)];
+    while let Some((indent_count, top)) = stack.pop() {
+        let indent = "  ".repeat(indent_count);
+        match top {
+            RenderNode::Leaf(l) => {
+                for line in wrap(&l, Options::with_termwidth().initial_indent(&indent).subsequent_indent(&indent)) {
+                    out.push_str(&line);
+                    out.push('\n');
+                }
+            },
+            RenderNode::KVLeaf(k, v) => {
+                for line in wrap(
+                    &format!("{}{}", k, v),
+                    Options::with_termwidth()
+                        .initial_indent(&indent)
+                        .subsequent_indent(&format!("{}{}", indent, " ".repeat(k.chars().count()))),
+                ) {
+                    out.push_str(&line);
+                    out.push('\n');
+                }
+            },
+            RenderNode::BlankLeaf => {
+                out.push('\n');
+            },
+            RenderNode::Branch(b) => {
+                stack.extend(b.iter().rev().map(|e| (indent_count + 1, e)));
+            },
+        }
+    }
+    return out;
 }
 
 impl Display for Error {
@@ -151,28 +290,36 @@ impl<T: std::error::Error> From<T> for Error {
     }
 }
 
-/// Create an error from multiple errors
-pub fn agg_err(message: &'static str, errs: Vec<Error>) -> Error {
-    return Error(Box::new(Error_ {
-        inner: Error_2::Full(FullError {
-            message: message,
-            attrs: HashMap::new(),
-            causes: errs,
-        }),
-        incidental: vec![],
-    }));
+fn log(body_color: Style, level_color: Style, level_text: &str, head: String, body: RenderNode) {
+    eprintln!(
+        "{}",
+        render(
+            RenderNode::Branch(
+                vec![
+                    RenderNode::KVLeaf(
+                        format!(
+                            "{} {}: ",
+                            body_color.apply_to(Local::now().to_rfc3339()),
+                            level_color.apply_to(level_text)
+                        ),
+                        head,
+                    ),
+                    body
+                ],
+            ),
+        )
+    );
 }
 
 /// Log a fatal error and terminate the program.
 pub fn fatal(e: Error) -> ! {
-    let body_color = Style::new().for_stderr().magenta();
-    let level_color = Style::new().for_stderr().magenta().bold();
-    eprintln!(
-        "{} {}: {}",
-        body_color.apply_to(Local::now().to_rfc3339()),
-        level_color.apply_to("FATAL"),
-        body_color.apply_to(format!("Exiting due to error:\n{:#?}", e))
-    );
+    let body_color = Style::new().for_stderr().red();
+    let level_color = Style::new().for_stderr().red().bold();
+    let (head, body) = e.render();
+    let head = level_color.apply_to(head).to_string();
+    let foot = level_color.apply_to("Exited due to above error").to_string();
+    log(body_color, level_color, "FATAL", head, body);
+    eprintln!("{}", foot);
     exit(1)
 }
 
@@ -185,17 +332,26 @@ pub struct Log {
     attrs: HashMap<&'static str, String>,
 }
 
-impl Log {
-    pub fn new(level: Level) -> Self {
+/// Create a new logger.
+pub fn new(level: Level) -> Log {
+    Log {
+        filter_priority: level.priority(),
+        attrs: HashMap::new(),
+    }
+}
+
+impl Default for Log {
+    fn default() -> Self {
         Self {
-            filter_priority: level.priority(),
+            filter_priority: Level::Info.priority(),
             attrs: HashMap::new(),
         }
     }
+}
 
-    /// Create a new `Log` that extends the source context.  Use like
-    /// `let new_log = log.fork(ea!(newkey = newvalue, ...));`. Values must have the
-    /// method `to_string()`.
+impl Log {
+    /// Create a new `Log` that inherits attributes from the base logging context.  Use
+    /// like `let new_log = log.fork(ea!(newkey = newvalue, ...));`.
     pub fn fork(&self, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Self {
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
@@ -209,46 +365,32 @@ impl Log {
         if l.priority() < self.filter_priority {
             return;
         }
-        let mut new_attrs = self.attrs.clone();
-        attrs(&mut new_attrs);
-
-        #[derive(Debug)]
-        struct Event<'a> {
-            #[allow(dead_code)]
-            message: &'a str,
-            #[allow(dead_code)]
-            attrs: &'a HashMap<&'static str, String>,
-        }
-
         let (body_color, level_color) = match l {
             Level::Debug => (Style::new().for_stderr().black().bright(), Style::new().for_stderr().black().bright()),
             Level::Info => (Style::new().for_stderr().black(), Style::new().for_stderr().black()),
-            Level::Warn => (Style::new().for_stderr().black(), Style::new().for_stderr().red()),
-            Level::Error => (Style::new().for_stderr().black(), Style::new().for_stderr().red().bold()),
+            Level::Warn => (Style::new().for_stderr().black(), Style::new().for_stderr().yellow()),
+            Level::Error => (Style::new().for_stderr().black(), Style::new().for_stderr().red()),
         };
-        eprintln!(
-            "{} {}: {}",
-            body_color.apply_to(Local::now().to_rfc3339()),
-            level_color.apply_to(l),
-            body_color.apply_to(Event {
-                message: message,
-                attrs: &new_attrs,
-            }.pretty_dbg_str())
-        )
+        let (head, body) = self.new_err_with(message, attrs).render();
+        log(body_color, level_color, &l.to_string(), head, body);
     }
 
+    /// Log a message at the debug level.
     pub fn debug(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log(Level::Debug, message, attrs);
     }
 
+    /// Log a message at the info level.
     pub fn info(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log(Level::Info, message, attrs);
     }
 
+    /// Log a message at the warn level.
     pub fn warn(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log(Level::Warn, message, attrs);
     }
 
+    /// Log a message at the error level.
     pub fn err(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log(Level::Error, message, attrs);
     }
@@ -294,28 +436,45 @@ impl Log {
         )
     }
 
-    pub fn debug_e(
-        &self,
-        e: Error,
-        message: &'static str,
-        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
-    ) {
+    /// Log an error with an additional message at the debug level.
+    pub fn debug_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log_e(Level::Debug, e, message, attrs);
     }
 
+    /// Log an error with an additional message at the info level.
     pub fn info_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log_e(Level::Info, e, message, attrs);
     }
 
+    /// Log an error with an additional message at the warn level.
     pub fn warn_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log_e(Level::Warn, e, message, attrs);
     }
 
+    /// Log an error with an additional message at the error level.
     pub fn err_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         self.log_e(Level::Error, e, message, attrs);
     }
 
-    pub fn new_err(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+    /// Create a new error including the attributes in this logging context.
+    pub fn new_err(&self, message: &'static str) -> Error {
+        return Error(Box::new(Error_ {
+            inner: Error_2::Full(FullError {
+                message: message,
+                causes: vec![],
+                attrs: HashMap::new(),
+            }),
+            incidental: vec![],
+        }));
+    }
+
+    /// Create a new error including the attributes in this logging context and merging
+    /// additional attributes.
+    pub fn new_err_with(
+        &self,
+        message: &'static str,
+        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
+    ) -> Error {
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
@@ -330,8 +489,10 @@ impl Log {
 }
 
 pub trait ErrContext {
-    fn context(self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error;
-    fn log_context(
+    fn context(self, message: &'static str) -> Error;
+    fn context_with(self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error;
+    fn log_context(self, log: &Log, message: &'static str) -> Error;
+    fn log_context_with(
         self,
         log: &Log,
         message: &'static str,
@@ -340,7 +501,18 @@ pub trait ErrContext {
 }
 
 impl<T: Into<Error>> ErrContext for T {
-    fn context(self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+    fn context(self, message: &'static str) -> Error {
+        return Error(Box::new(Error_ {
+            inner: Error_2::Full(FullError {
+                message: message,
+                attrs: HashMap::new(),
+                causes: vec![self.into()],
+            }),
+            incidental: vec![],
+        }));
+    }
+
+    fn context_with(self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
         let mut new_attrs = HashMap::new();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
@@ -353,7 +525,18 @@ impl<T: Into<Error>> ErrContext for T {
         }));
     }
 
-    fn log_context(
+    fn log_context(self, log: &Log, message: &'static str) -> Error {
+        return Error(Box::new(Error_ {
+            inner: Error_2::Full(FullError {
+                message: message,
+                attrs: log.attrs.clone(),
+                causes: vec![self.into()],
+            }),
+            incidental: vec![],
+        }));
+    }
+
+    fn log_context_with(
         self,
         log: &Log,
         message: &'static str,
@@ -373,12 +556,14 @@ impl<T: Into<Error>> ErrContext for T {
 }
 
 pub trait ResultContext<O> {
-    fn context(
+    fn context(self, message: &'static str) -> Result<O, Error>;
+    fn context_with(
         self,
         message: &'static str,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Result<O, Error>;
-    fn log_context(
+    fn log_context(self, log: &Log, message: &'static str) -> Result<O, Error>;
+    fn log_context_with(
         self,
         log: &Log,
         message: &'static str,
@@ -387,18 +572,32 @@ pub trait ResultContext<O> {
 }
 
 impl<O, T: Into<Error>> ResultContext<O> for Result<O, T> {
-    fn context(
+    fn context(self, message: &'static str) -> Result<O, Error> {
+        match self {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e.context(message)),
+        }
+    }
+
+    fn context_with(
         self,
         message: &'static str,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Result<O, Error> {
         match self {
             Ok(x) => Ok(x),
-            Err(e) => Err(e.context(message, attrs)),
+            Err(e) => Err(e.context_with(message, attrs)),
         }
     }
 
-    fn log_context(
+    fn log_context(self, log: &Log, message: &'static str) -> Result<O, Error> {
+        match self {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e.log_context(log, message)),
+        }
+    }
+
+    fn log_context_with(
         self,
         log: &Log,
         message: &'static str,
@@ -406,7 +605,46 @@ impl<O, T: Into<Error>> ResultContext<O> for Result<O, T> {
     ) -> Result<O, Error> {
         match self {
             Ok(x) => Ok(x),
-            Err(e) => Err(e.log_context(log, message, attrs)),
+            Err(e) => Err(e.log_context_with(log, message, attrs)),
+        }
+    }
+}
+
+impl<O> ResultContext<O> for Option<O> {
+    fn context(self, message: &'static str) -> Result<O, Error> {
+        match self {
+            Some(x) => Ok(x),
+            None => Err(err(message)),
+        }
+    }
+
+    fn context_with(
+        self,
+        message: &'static str,
+        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
+    ) -> Result<O, Error> {
+        match self {
+            Some(x) => Ok(x),
+            None => Err(err_with(message, attrs)),
+        }
+    }
+
+    fn log_context(self, log: &Log, message: &'static str) -> Result<O, Error> {
+        match self {
+            Some(x) => Ok(x),
+            None => Err(log.new_err(message)),
+        }
+    }
+
+    fn log_context_with(
+        self,
+        log: &Log,
+        message: &'static str,
+        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
+    ) -> Result<O, Error> {
+        match self {
+            Some(x) => Ok(x),
+            None => Err(log.new_err_with(message, attrs)),
         }
     }
 }

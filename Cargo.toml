@@ -10,3 +10,4 @@ repository = "https://github.com/andrewbaxter/loga"
 [dependencies]
 chrono = "0.4.24"
 console = "0.15.7"
+textwrap = { version = "0.16.0", features = ["terminal_size"] }
