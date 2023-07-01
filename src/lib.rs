@@ -292,22 +292,14 @@ impl<T: std::error::Error> From<T> for Error {
 
 fn log(body_color: Style, level_color: Style, level_text: &str, head: String, body: RenderNode) {
     eprintln!(
-        "{}",
+        "{}{}",
         render(
-            RenderNode::Branch(
-                vec![
-                    RenderNode::KVLeaf(
-                        format!(
-                            "{} {}: ",
-                            body_color.apply_to(Local::now().to_rfc3339()),
-                            level_color.apply_to(level_text)
-                        ),
-                        head,
-                    ),
-                    body
-                ],
+            RenderNode::KVLeaf(
+                format!("{} {}: ", body_color.apply_to(Local::now().to_rfc3339()), level_color.apply_to(level_text)),
+                head,
             ),
-        )
+        ),
+        render(body)
     );
 }
 
