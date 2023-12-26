@@ -1,5 +1,8 @@
 use chrono::Local;
-use console::Style;
+use console::{
+    Style,
+    measure_text_width,
+};
 use textwrap::{
     wrap,
     Options,
@@ -88,7 +91,6 @@ pub struct Error(Box<Error_>);
 enum RenderNode {
     Leaf(String),
     KVLeaf(String, String),
-    BlankLeaf,
     Branch(Vec<RenderNode>),
 }
 
@@ -177,21 +179,16 @@ impl Error {
             Error_2::Full(e) => {
                 message = e.message.to_string();
                 for a in &e.attrs {
-                    children.push(RenderNode::BlankLeaf);
                     children.push(
                         RenderNode::KVLeaf(
                             dark_style.apply_to(format!("{} = ", a.0)).to_string(),
-                            dark_style.apply_to(a.1).to_string(),
+                            dark_style.apply_to(a.1.trim()).to_string(),
                         ),
                     )
                 }
                 if e.causes.len() > 0 {
-                    children.push(RenderNode::BlankLeaf);
                     children.push(RenderNode::Leaf(highlight_style.apply_to("Caused by:").to_string()));
-                    for (i, e) in e.causes.iter().enumerate() {
-                        if i > 0 {
-                            children.push(RenderNode::BlankLeaf);
-                        }
+                    for e in &e.causes {
                         let (head, body) = e.render();
                         children.push(RenderNode::Branch(vec![RenderNode::KVLeaf("- ".to_string(), head), body]));
                     }
@@ -199,12 +196,8 @@ impl Error {
             },
         }
         if self.0.incidental.len() > 0 {
-            children.push(RenderNode::BlankLeaf);
             children.push(RenderNode::Leaf("Incidentally:".to_string()));
-            for (i, e) in self.0.incidental.iter().enumerate() {
-                if i > 0 {
-                    children.push(RenderNode::BlankLeaf);
-                }
+            for e in &self.0.incidental {
                 let (head, body) = e.render();
                 children.push(RenderNode::Branch(vec![RenderNode::KVLeaf("- ".to_string(), head), body]));
             }
@@ -227,17 +220,14 @@ fn render(root: RenderNode) -> String {
             },
             RenderNode::KVLeaf(k, v) => {
                 for line in wrap(
-                    &format!("{}{}", k, v),
+                    &v,
                     Options::with_termwidth()
-                        .initial_indent(&indent)
-                        .subsequent_indent(&format!("{}{}", indent, " ".repeat(k.chars().count()))),
+                        .initial_indent(&format!("{}{}", indent, k))
+                        .subsequent_indent(&format!("{}{}", indent, " ".repeat(measure_text_width(k)))),
                 ) {
                     out.push_str(&line);
                     out.push('\n');
                 }
-            },
-            RenderNode::BlankLeaf => {
-                out.push('\n');
             },
             RenderNode::Branch(b) => {
                 stack.extend(b.iter().rev().map(|e| (indent_count + 1, e)));
@@ -291,7 +281,7 @@ impl<T: std::error::Error> From<T> for Error {
 }
 
 fn log(body_color: Style, level_color: Style, level_text: &str, head: String, body: RenderNode) {
-    eprintln!(
+    eprint!(
         "{}{}",
         render(
             RenderNode::KVLeaf(
