@@ -1,19 +1,19 @@
 use loga::{
     fatal,
-    err_with,
+    new_err_with,
     ea,
-    agg_err,
-    err,
+    new_agg_err,
+    new_err,
 };
 
 fn main() {
     fatal(
-        agg_err(
+        new_agg_err(
             "The main thing failed",
             vec![
-                err_with("The primary system exploded", ea!(att1 = "Hi", att2 = 423))
+                new_err_with("The primary system exploded", ea!(att1 = "Hi", att2 = 423))
                     .also(
-                        err_with(
+                        new_err_with(
                             "An incidental_error with a threateningly long message that might be able to wrap if I extend the length somewhat further and then some I guess going by editor width this might not be quite enough",
                             ea!(
                                 another_attr =
@@ -21,8 +21,8 @@ fn main() {
                             ),
                         ),
                     )
-                    .also(err("Nothing much else to add")),
-                err("Just tacking this one on too")
+                    .also(new_err("Nothing much else to add")),
+                new_err("Just tacking this one on too")
             ],
         ),
     );
