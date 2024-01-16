@@ -13,42 +13,12 @@ use std::{
         Display,
     },
 };
-
-/// A tagging system that (1) indicates how users should interpret the log message
-/// and (2) presents a linear scale for filtering output.
-pub enum Level {
-    /// Useful for debugging, not output by default
-    Debug,
-    /// Spam, depending on the beholder
-    Info,
-    /// Unexpected but non-disruptive issues, may or may not indicate a real issue
-    Warn,
-    /// Issues that may lead to undesired termination of a process, but not the entire
-    /// program
-    Error,
-}
-
-impl Display for Level {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Level::Debug => "DEBUG",
-            Level::Info => "INFO",
-            Level::Warn => "WARN",
-            Level::Error => "ERROR",
-        }.fmt(f)
-    }
-}
-
-impl Level {
-    pub fn priority(&self) -> i8 {
-        match self {
-            Level::Debug => 10,
-            Level::Info => 20,
-            Level::Warn => 30,
-            Level::Error => 40,
-        }
-    }
-}
+use crate::{
+    DebugDisplay,
+    ea,
+    common::flags_,
+    Flags,
+};
 
 #[derive(Debug, Clone)]
 pub struct FullError {
@@ -163,7 +133,7 @@ impl Error {
 
     /// Return a new error adding a layer of context including all attributes in the
     /// provided log along with the specified message.
-    pub fn log_context(self, log: &Log, message: &'static str) -> Error {
+    pub fn log_context<F: Flags>(self, log: &Log<F>, message: &'static str) -> Error {
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
                 message: message,
@@ -176,9 +146,11 @@ impl Error {
 
     /// Return a new error adding a layer of context including all attributes in the
     /// provided log along with the specified message and new attributes.
-    pub fn log_context_with(
+    pub fn log_context_with<
+        F: Flags,
+    >(
         self,
-        log: &Log,
+        log: &Log<F>,
         message: &'static str,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Error {
@@ -265,7 +237,10 @@ impl Display for Error {
 
 impl<T: std::error::Error> From<T> for Error {
     fn from(value: T) -> Self {
-        Error::from(value)
+        #[cfg(debug_assertions)]
+        return Error::from(value.dbg_str());
+        #[cfg(not(debug_assertions))]
+        return Error::from(value);
     }
 }
 
@@ -291,115 +266,66 @@ pub(crate) fn log(body_color: Style, level_color: Style, level_text: &str, head:
 /// objects. The two hardest things when programming, as they say - no need to make
 /// things harder.
 #[derive(Clone)]
-pub struct Log {
-    pub(crate) filter_priority: i8,
+pub struct Log<F: Flags> {
     pub(crate) attrs: HashMap<&'static str, String>,
+    pub(crate) flags: F,
 }
 
-impl Default for Log {
+impl<F: Flags> Default for Log<F> {
     fn default() -> Self {
         Self {
-            filter_priority: Level::Info.priority(),
             attrs: HashMap::new(),
+            flags: flags_(F::all()),
         }
     }
 }
 
-impl Log {
-    /// Set the log level.  If you don't call this the default level is Debug.  Log
-    /// level only applies when logging, not when generating errors or forking.
-    pub fn with_level(mut self, level: Level) -> Self {
-        self.filter_priority = level.priority();
-        return self;
-    }
-
+impl<F: Flags> Log<F> {
     /// Create a new `Log` that inherits attributes from the base logging context.  Use
     /// like `let new_log = log.fork(ea!(newkey = newvalue, ...));`.
     pub fn fork(&self, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Self {
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
         return Log {
-            filter_priority: self.filter_priority,
             attrs: new_attrs,
+            flags: flags_(F::all()),
         };
     }
 
-    pub fn log(&self, l: Level, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        if l.priority() < self.filter_priority {
+    /// Log a message.  The message will only be rendered and output if any of the
+    /// specified flags are set.
+    pub fn log(&self, flags: F, message: &'static str) {
+        self.log_with(flags, message, ea!());
+    }
+
+    /// Log a message.  The attributes will only be evaluated and the message will only
+    /// be rendered and output if any of the specified flags are set.
+    pub fn log_with(&self, flags: F, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
+        if !self.flags.intersects(flags) {
             return;
         }
-        let (body_color, level_color) = match l {
-            Level::Debug => (Style::new().for_stderr().black().bright(), Style::new().for_stderr().black().bright()),
-            Level::Info => (Style::new().for_stderr().black(), Style::new().for_stderr().black()),
-            Level::Warn => (Style::new().for_stderr().black(), Style::new().for_stderr().yellow()),
-            Level::Error => (Style::new().for_stderr().black(), Style::new().for_stderr().red()),
-        };
-        let (head, body) = self.new_err_with(message, attrs).render();
-        log(body_color, level_color, &l.to_string(), head, body);
-    }
-
-    /// Log a message at the debug level.
-    pub fn debug(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log(Level::Debug, message, attrs);
-    }
-
-    /// Log a message at the info level.
-    pub fn info(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log(Level::Info, message, attrs);
-    }
-
-    /// Log a message at the warn level.
-    pub fn warn(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log(Level::Warn, message, attrs);
-    }
-
-    /// Log a message at the error level.
-    pub fn err(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log(Level::Error, message, attrs);
+        let style = flags.style();
+        let (head, body) = self.err_with(message, attrs).render();
+        log(style.body_style, style.label_style, style.label, head, body);
     }
 
     pub fn log_e(
         &self,
-        l: Level,
+        flags: F,
         e: Error,
         message: &'static str,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) {
-        if l.priority() < self.filter_priority {
+        if !self.flags.intersects(flags) {
             return;
         }
-        let (body_color, level_color) = match l {
-            Level::Debug => (Style::new().for_stderr().black().bright(), Style::new().for_stderr().black().bright()),
-            Level::Info => (Style::new().for_stderr().black(), Style::new().for_stderr().black()),
-            Level::Warn => (Style::new().for_stderr().black(), Style::new().for_stderr().yellow()),
-            Level::Error => (Style::new().for_stderr().black(), Style::new().for_stderr().red()),
-        };
+        let style = flags.style();
         let (head, body) = e.context_with(message, attrs).render();
-        log(body_color, level_color, &l.to_string(), head, body);
-    }
-
-    /// Log an error with an additional message at the debug level.
-    pub fn debug_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log_e(Level::Debug, e, message, attrs);
-    }
-
-    /// Log an error with an additional message at the info level.
-    pub fn info_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log_e(Level::Info, e, message, attrs);
-    }
-
-    /// Log an error with an additional message at the warn level.
-    pub fn warn_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log_e(Level::Warn, e, message, attrs);
-    }
-
-    /// Log an error with an additional message at the error level.
-    pub fn err_e(&self, e: Error, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        self.log_e(Level::Error, e, message, attrs);
+        log(style.body_style, style.label_style, style.label, head, body);
     }
 
     /// Create a new error including the attributes in this logging context.
-    pub fn new_err(&self, message: &'static str) -> Error {
+    pub fn err(&self, message: &'static str) -> Error {
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
                 message: message,
@@ -412,11 +338,7 @@ impl Log {
 
     /// Create a new error including the attributes in this logging context and merging
     /// additional attributes.
-    pub fn new_err_with(
-        &self,
-        message: &'static str,
-        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
-    ) -> Error {
+    pub fn err_with(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {

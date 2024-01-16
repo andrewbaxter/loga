@@ -6,18 +6,28 @@ pub mod conversion;
 pub use types::{
     Error,
     Log,
-    Level,
 };
 pub use entry::{
+    init_flags,
     new,
-    new_err,
-    new_err_with,
-    new_agg_err,
-    new_agg_err_with,
+    err,
+    err_with,
+    agg_err,
+    agg_err_with,
     fatal,
 };
-pub use common::DebugDisplay;
+pub use common::{
+    DebugDisplay,
+    Flags,
+    FlagsStyle,
+    StandardFlags,
+};
 pub use conversion::{
     ErrContext,
     ResultContext,
 };
+
+/// Re-exported dependencies used in interfaces, etc.
+pub mod republish {
+    pub use console::Color;
+}

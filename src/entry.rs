@@ -3,19 +3,34 @@ use std::{
     collections::HashMap,
     process::exit,
 };
-use crate::types::{
-    Error,
-    Error_2,
-    FullError,
-    Error_,
-    log,
-    Log,
-    Level,
+use crate::{
+    types::{
+        Error,
+        Error_2,
+        FullError,
+        Error_,
+        log,
+        Log,
+    },
+    common::{
+        Flags,
+        flags_,
+        StandardFlags,
+    },
 };
 
+/// Set flags to use for enabling/disabling log messages. This can only be done
+/// once, and must be done before it's read or else the defaults are used.
+///
+/// Logs are only written if any of the flags specified in the log call were set
+/// during initialization.
+pub fn init_flags<T: Flags>(flags: T) {
+    flags_(flags);
+}
+
 /// Create a new error. If you want to inherit attributes from a logging context,
-/// see `Log::new_err`.
-pub fn new_err(message: &'static str) -> Error {
+/// see `Log::err`.
+pub fn err(message: &'static str) -> Error {
     return Error(Box::new(Error_ {
         inner: Error_2::Full(FullError {
             message: message,
@@ -27,8 +42,8 @@ pub fn new_err(message: &'static str) -> Error {
 }
 
 /// Create a new error and attach attributes. If you want to inherit attributes
-/// from a logging context, see `Log::new_err`.
-pub fn new_err_with(message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+/// from a logging context, see `Log::err`.
+pub fn err_with(message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
     let mut new_attrs = HashMap::new();
     attrs(&mut new_attrs);
     return Error(Box::new(Error_ {
@@ -42,7 +57,7 @@ pub fn new_err_with(message: &'static str, attrs: impl Fn(&mut HashMap<&'static 
 }
 
 /// Create an error from multiple errors
-pub fn new_agg_err(message: &'static str, errs: Vec<Error>) -> Error {
+pub fn agg_err(message: &'static str, errs: Vec<Error>) -> Error {
     return Error(Box::new(Error_ {
         inner: Error_2::Full(FullError {
             message: message,
@@ -54,7 +69,7 @@ pub fn new_agg_err(message: &'static str, errs: Vec<Error>) -> Error {
 }
 
 /// Create an error from multiple errors, attaching attributes
-pub fn new_agg_err_with(
+pub fn agg_err_with(
     message: &'static str,
     errs: Vec<Error>,
     attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
@@ -83,10 +98,18 @@ pub fn fatal(e: Error) -> ! {
     exit(1)
 }
 
-/// Create a new logger (defaults to Debug level, change with `with_level`).
-pub fn new() -> Log {
-    Log {
-        filter_priority: Level::Debug.priority(),
+/// Create a new logger (defaults to Debug level, change with `with_level`). You
+/// may want to alias this with your flag type of choice.
+pub fn new<F: Flags>() -> Log<F> {
+    return Log {
         attrs: HashMap::new(),
-    }
+        flags: flags_(F::all()),
+    };
+}
+
+pub fn new_standard() -> Log<StandardFlags> {
+    return Log {
+        attrs: HashMap::new(),
+        flags: flags_(StandardFlags::all()),
+    };
 }
