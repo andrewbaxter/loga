@@ -281,6 +281,15 @@ impl<F: Flags> Default for Log<F> {
 }
 
 impl<F: Flags> Log<F> {
+    /// Create a new logger (defaults to Debug level, change with `with_level`). You
+    /// may want to alias this with your flag type of choice.
+    pub fn new() -> Self {
+        return Log {
+            attrs: HashMap::new(),
+            flags: flags_(F::all()),
+        };
+    }
+
     /// Create a new `Log` that inherits attributes from the base logging context.  Use
     /// like `let new_log = log.fork(ea!(newkey = newvalue, ...));`.
     pub fn fork(&self, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Self {

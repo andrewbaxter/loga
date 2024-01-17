@@ -1,4 +1,4 @@
-use console::Style;
+use console::Style as TextStyle;
 use std::{
     collections::HashMap,
     process::exit,
@@ -15,15 +15,15 @@ use crate::{
     common::{
         Flags,
         flags_,
-        StandardFlags,
     },
+    FlagsStyle,
 };
 
 /// Set flags to use for enabling/disabling log messages. This can only be done
-/// once, and must be done before it's read or else the defaults are used.
+/// once, and must be done before creating any loggers.
 ///
-/// Logs are only written if any of the flags specified in the log call were set
-/// during initialization.
+/// Whenever a logging call is made, the logger checks to see if any of the flags
+/// passed to the logging call were enabled when `init_flags` was called.
 pub fn init_flags<T: Flags>(flags: T) {
     flags_(flags);
 }
@@ -88,8 +88,8 @@ pub fn agg_err_with(
 
 /// Log a fatal error and terminate the program.
 pub fn fatal(e: Error) -> ! {
-    let body_color = Style::new().for_stderr().red();
-    let level_color = Style::new().for_stderr().red().bold();
+    let body_color = TextStyle::new().for_stderr().red();
+    let level_color = TextStyle::new().for_stderr().red().bold();
     let (head, body) = e.render();
     let head = level_color.apply_to(head).to_string();
     let foot = level_color.apply_to("Exited due to above error").to_string();
@@ -98,16 +98,52 @@ pub fn fatal(e: Error) -> ! {
     exit(1)
 }
 
-/// Create a new logger (defaults to Debug level, change with `with_level`). You
-/// may want to alias this with your flag type of choice.
-pub fn new<F: Flags>() -> Log<F> {
-    return Log {
-        attrs: HashMap::new(),
-        flags: flags_(F::all()),
-    };
+bitflags::bitflags!{
+    /// A basic set of flags if you don't want to define your own yet.
+    #[derive(PartialEq, Eq, Clone, Copy)] pub struct StandardFlags: u8 {
+        const FATAL = 1 << 0;
+        const ERROR = 1 << 1;
+        const WARN = 1 << 2;
+        const INFO = 1 << 3;
+        const DEBUG = 1 << 4;
+    }
 }
 
-pub fn new_standard() -> Log<StandardFlags> {
+impl Flags for StandardFlags {
+    fn style(self) -> FlagsStyle {
+        match self.iter().next().unwrap() {
+            StandardFlags::DEBUG => FlagsStyle {
+                body_style: TextStyle::new().for_stderr().black().bright(),
+                label_style: TextStyle::new().for_stderr().black().bright(),
+                label: "DEBUG",
+            },
+            StandardFlags::INFO => FlagsStyle {
+                body_style: TextStyle::new().for_stderr().black(),
+                label_style: TextStyle::new().for_stderr().black(),
+                label: "INFO",
+            },
+            StandardFlags::WARN => FlagsStyle {
+                body_style: TextStyle::new().for_stderr().black(),
+                label_style: TextStyle::new().for_stderr().yellow(),
+                label: "WARN",
+            },
+            StandardFlags::ERROR => FlagsStyle {
+                body_style: TextStyle::new().for_stderr().black(),
+                label_style: TextStyle::new().for_stderr().red(),
+                label: "ERROR",
+            },
+            StandardFlags::FATAL => FlagsStyle {
+                body_style: TextStyle::new().for_stderr().black(),
+                label_style: TextStyle::new().for_stderr().black(),
+                label: "FATAL",
+            },
+            _ => panic!(),
+        }
+    }
+}
+
+/// Creates a new logger with the standard set of flags.
+pub fn new() -> Log<StandardFlags> {
     return Log {
         attrs: HashMap::new(),
         flags: flags_(StandardFlags::all()),
