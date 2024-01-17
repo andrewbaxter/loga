@@ -30,4 +30,5 @@ pub use conversion::{
 /// Re-exported dependencies used in interfaces, etc.
 pub mod republish {
     pub use console::Color;
+    pub use bitflags;
 }
