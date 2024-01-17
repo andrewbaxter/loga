@@ -1,14 +1,8 @@
-use std::{
-    any::Any,
-    sync::OnceLock,
-};
-use console::Style as TextStyle;
-
 pub struct FlagsStyle {
     /// Color to render the log message body;
-    pub body_style: TextStyle,
+    pub body_style: console::Style,
     /// Color to render the flag label;
-    pub label_style: TextStyle,
+    pub label_style: console::Style,
     /// Text for the log message flag label (ex: WARN, DEBUG, etc)
     pub label: &'static str,
 }
@@ -18,19 +12,6 @@ pub struct FlagsStyle {
 /// `StandardFlags` for an example.
 pub trait Flags: bitflags::Flags + Send + Sync + Copy + Eq {
     fn style(self) -> FlagsStyle;
-}
-
-pub(crate) fn flags_<T: Flags>(init: T) -> T {
-    static FLAGS: OnceLock<Box<dyn Any + Sync + Send>> = OnceLock::new();
-    let res =
-        *FLAGS
-            .get_or_init(move || Box::new(init))
-            .downcast_ref::<T>()
-            .expect("Flags of another type have already been initialized!");
-    if res != init {
-        panic!("Flags have already been initialized with different values!");
-    }
-    return res;
 }
 
 /// Turn key/values into a lambda for extending attributes, used in various log and

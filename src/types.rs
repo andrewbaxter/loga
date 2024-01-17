@@ -16,7 +16,6 @@ use std::{
 use crate::{
     DebugDisplay,
     ea,
-    common::flags_,
     Flags,
 };
 
@@ -268,14 +267,14 @@ pub(crate) fn log(body_color: Style, level_color: Style, level_text: &str, head:
 #[derive(Clone)]
 pub struct Log<F: Flags> {
     pub(crate) attrs: HashMap<&'static str, String>,
-    pub(crate) flags: F,
+    pub(crate) flags: Option<F>,
 }
 
 impl<F: Flags> Default for Log<F> {
     fn default() -> Self {
         Self {
             attrs: HashMap::new(),
-            flags: flags_(F::all()),
+            flags: None,
         }
     }
 }
@@ -286,7 +285,7 @@ impl<F: Flags> Log<F> {
     pub fn new() -> Self {
         return Log {
             attrs: HashMap::new(),
-            flags: flags_(F::all()),
+            flags: None,
         };
     }
 
@@ -297,7 +296,15 @@ impl<F: Flags> Log<F> {
         attrs(&mut new_attrs);
         return Log {
             attrs: new_attrs,
-            flags: flags_(F::all()),
+            flags: self.flags,
+        };
+    }
+
+    /// Initialize or replace flags and return a new Log instance.
+    pub fn with_flags(self, flags: F) -> Self {
+        return Log {
+            attrs: self.attrs,
+            flags: Some(flags),
         };
     }
 
@@ -310,14 +317,16 @@ impl<F: Flags> Log<F> {
     /// Log a message.  The attributes will only be evaluated and the message will only
     /// be rendered and output if any of the specified flags are set.
     pub fn log_with(&self, flags: F, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        if !self.flags.intersects(flags) {
+        let mask = self.flags.expect("Can't log because flags aren't set in this logger!");
+        if !mask.intersects(flags) {
             return;
         }
         self.log_err(flags, self.err_with(message, attrs));
     }
 
     pub fn log_err(&self, flags: F, e: Error) {
-        if !self.flags.intersects(flags) {
+        let mask = self.flags.expect("Can't log because flags aren't set in this logger!");
+        if !mask.intersects(flags) {
             return;
         }
         let style = flags.style();

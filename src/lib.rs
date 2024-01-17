@@ -8,13 +8,13 @@ pub use types::{
     Log,
 };
 pub use entry::{
-    init_flags,
-    new,
     err,
     err_with,
     agg_err,
     agg_err_with,
     fatal,
+    StandardFlags,
+    StandardLog,
 };
 pub use common::{
     DebugDisplay,

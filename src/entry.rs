@@ -14,19 +14,9 @@ use crate::{
     },
     common::{
         Flags,
-        flags_,
     },
     FlagsStyle,
 };
-
-/// Set flags to use for enabling/disabling log messages. This can only be done
-/// once, and must be done before creating any loggers.
-///
-/// Whenever a logging call is made, the logger checks to see if any of the flags
-/// passed to the logging call were enabled when `init_flags` was called.
-pub fn init_flags<T: Flags>(flags: T) {
-    flags_(flags);
-}
 
 /// Create a new error. If you want to inherit attributes from a logging context,
 /// see `Log::err`.
@@ -142,10 +132,5 @@ impl Flags for StandardFlags {
     }
 }
 
-/// Creates a new logger with the standard set of flags.
-pub fn new() -> Log<StandardFlags> {
-    return Log {
-        attrs: HashMap::new(),
-        flags: flags_(StandardFlags::all()),
-    };
-}
+/// A logger using a preconfigured flag set.
+pub type StandardLog = Log<StandardFlags>;

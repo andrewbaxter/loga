@@ -16,7 +16,9 @@ const DEBUG: StandardFlags = StandardFlags::DEBUG;
 
 fn main1() -> Result<(), loga::Error> {
     // All errors stacked from this will have "system = main"
-    let log = &loga::Log::<StandardFlags>::new().fork(ea!(system = "main"));
+    let log = &loga::Log::<StandardFlags>::new()
+        .with_flags(WARN | INFO)
+        .fork(ea!(system = "main"));
 
     // Convert the error result to `loga::Error`, add all the logger's attributes, add
     // a message, and add additional attributes.
@@ -43,7 +45,6 @@ fn main1() -> Result<(), loga::Error> {
 }
 
 fn main() {
-    loga::init_flags(WARN | INFO);
     match main1() {
         Ok(_) => (),
         Err(e) => loga::fatal(e),
@@ -69,7 +70,7 @@ The errors are intended _only_ for human consumption. Any information that may n
 
 ## Flags
 
-Unlike traditional loggers which have a linear scale of levels, sometimes multiplied by different "loggers" or additional dimensions, this library uses a set of additive flags. If any of the flags in the log call are set in the flags provided in `init_flags` then the log message will be rendered and displayed, otherwise it will be dropped.
+Unlike traditional loggers which have a linear scale of levels, sometimes multiplied by different "loggers" or additional dimensions, this library uses a set of additive flags. If any of the flags in the log call are set in the flags provided when constructing the logger then the log message will be rendered, otherwise it will be skipped.
 
 To keep things simple you can use `StandardFlags` with `DEBUG`, `INFO`, `WARN`, etc. levels.
 
@@ -79,7 +80,7 @@ Flags only affect logging, not errors.
 
 ## Usage tips
 
-You may want to alias `new()` to hard code the flags of your choice.
+You may want to alias the generic `Log` with the flags type of your choice.
 
 In non-logging functions or objects that may be shared in multiple contexts, rather than receive a logger from the caller it may be simpler to start a new (blank) Log tree internally, or just use `.context`. The caller can later add attributes using `.log_context`.
 
