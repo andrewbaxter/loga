@@ -16,7 +16,7 @@ const DEBUG: StandardFlags = StandardFlags::DEBUG;
 
 fn main1() -> Result<(), loga::Error> {
     // All errors stacked from this will have "system = main"
-    let log = &loga::new().fork(ea!(system = "main"));
+    let log = &loga::Log::<StandardFlags>::new().fork(ea!(system = "main"));
 
     // Convert the error result to `loga::Error`, add all the logger's attributes, add
     // a message, and add additional attributes.

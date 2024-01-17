@@ -187,8 +187,8 @@ impl<O, T: Into<Error>> ResultContext<O> for Result<O, T> {
     }
 
     fn log<F: Flags>(self, log: &Log<F>, flags: F, message: &'static str) {
-        if let Err(e) = self {
-            log.log_e(flags, e.into(), message, ea!());
+        if let Err(e) = self.context(message) {
+            log.log_err(flags, e);
         }
     }
 
@@ -201,8 +201,8 @@ impl<O, T: Into<Error>> ResultContext<O> for Result<O, T> {
         message: &'static str,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) {
-        if let Err(e) = self {
-            log.log_e(flags, e.into(), message, attrs);
+        if let Err(e) = self.context_with(message, attrs) {
+            log.log_err(flags, e);
         }
     }
 }
@@ -249,7 +249,7 @@ impl<O> ResultContext<O> for Option<O> {
 
     fn log<F: Flags>(self, log: &Log<F>, flags: F, message: &'static str) {
         if self.is_none() {
-            log.log_e(flags, err("No value"), message, ea!());
+            log.log_err(flags, err("No value").context(message));
         }
     }
 
@@ -263,7 +263,7 @@ impl<O> ResultContext<O> for Option<O> {
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) {
         if self.is_none() {
-            log.log_e(flags, err("No value"), message, attrs);
+            log.log_err(flags, err("No value").context_with(message, attrs));
         }
     }
 }

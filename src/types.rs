@@ -313,23 +313,15 @@ impl<F: Flags> Log<F> {
         if !self.flags.intersects(flags) {
             return;
         }
-        let style = flags.style();
-        let (head, body) = self.err_with(message, attrs).render();
-        log(style.body_style, style.label_style, style.label, head, body);
+        self.log_err(flags, self.err_with(message, attrs));
     }
 
-    pub fn log_e(
-        &self,
-        flags: F,
-        e: Error,
-        message: &'static str,
-        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
-    ) {
+    pub fn log_err(&self, flags: F, e: Error) {
         if !self.flags.intersects(flags) {
             return;
         }
         let style = flags.style();
-        let (head, body) = e.context_with(message, attrs).render();
+        let (head, body) = e.render();
         log(style.body_style, style.label_style, style.label, head, body);
     }
 
