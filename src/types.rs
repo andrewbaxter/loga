@@ -118,7 +118,7 @@ impl Error {
     }
 
     /// Return a new error adding a layer of context with a message and attributes.
-    fn context_with(self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+    pub fn context_with(self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
         let mut new_attrs = HashMap::new();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
