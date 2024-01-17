@@ -1,6 +1,3 @@
-use bitflags::bitflags;
-use console::Style as TextStyle;
-
 pub mod entry;
 pub mod common;
 pub mod types;
@@ -34,4 +31,3 @@ pub mod republish {
     pub use console::Color;
     pub use bitflags;
 }
-
