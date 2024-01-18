@@ -91,11 +91,10 @@ pub fn fatal(e: Error) -> ! {
 bitflags::bitflags!{
     /// A basic set of flags if you don't want to define your own yet.
     #[derive(PartialEq, Eq, Clone, Copy)] pub struct StandardFlags: u8 {
-        const FATAL = 1 << 0;
-        const ERROR = 1 << 1;
-        const WARN = 1 << 2;
-        const INFO = 1 << 3;
-        const DEBUG = 1 << 4;
+        const ERROR = 1 << 0;
+        const WARN = 1 << 1;
+        const INFO = 1 << 2;
+        const DEBUG = 1 << 3;
     }
 }
 
@@ -121,11 +120,6 @@ impl Flags for StandardFlags {
                 body_style: TextStyle::new().for_stderr().black(),
                 label_style: TextStyle::new().for_stderr().red(),
                 label: "ERROR",
-            },
-            StandardFlags::FATAL => FlagsStyle {
-                body_style: TextStyle::new().for_stderr().black(),
-                label_style: TextStyle::new().for_stderr().black(),
-                label: "FATAL",
             },
             _ => panic!(),
         }
