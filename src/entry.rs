@@ -2,6 +2,7 @@ use console::Style as TextStyle;
 use std::{
     collections::HashMap,
     process::exit,
+    io::Write,
 };
 use crate::{
     types::{
@@ -85,6 +86,7 @@ pub fn fatal(e: Error) -> ! {
     let foot = level_color.apply_to("Exited due to above error").to_string();
     log(body_color, level_color, "FATAL", head, body);
     eprintln!("{}", foot);
+    _ = std::io::stderr().flush();
     exit(1)
 }
 
