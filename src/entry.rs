@@ -21,10 +21,10 @@ use crate::{
 
 /// Create a new error. If you want to inherit attributes from a logging context,
 /// see `Log::err`.
-pub fn err(message: &'static str) -> Error {
+pub fn err(message: impl ToString) -> Error {
     return Error(Box::new(Error_ {
         inner: Error_2::Full(FullError {
-            message: message,
+            message: message.to_string(),
             attrs: HashMap::new(),
             causes: vec![],
         }),
@@ -34,12 +34,12 @@ pub fn err(message: &'static str) -> Error {
 
 /// Create a new error and attach attributes. If you want to inherit attributes
 /// from a logging context, see `Log::err`.
-pub fn err_with(message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+pub fn err_with(message: impl ToString, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
     let mut new_attrs = HashMap::new();
     attrs(&mut new_attrs);
     return Error(Box::new(Error_ {
         inner: Error_2::Full(FullError {
-            message: message,
+            message: message.to_string(),
             attrs: new_attrs,
             causes: vec![],
         }),
@@ -48,10 +48,10 @@ pub fn err_with(message: &'static str, attrs: impl Fn(&mut HashMap<&'static str,
 }
 
 /// Create an error from multiple errors
-pub fn agg_err(message: &'static str, errs: Vec<Error>) -> Error {
+pub fn agg_err(message: impl ToString, errs: Vec<Error>) -> Error {
     return Error(Box::new(Error_ {
         inner: Error_2::Full(FullError {
-            message: message,
+            message: message.to_string(),
             attrs: HashMap::new(),
             causes: errs,
         }),
@@ -61,7 +61,7 @@ pub fn agg_err(message: &'static str, errs: Vec<Error>) -> Error {
 
 /// Create an error from multiple errors, attaching attributes
 pub fn agg_err_with(
-    message: &'static str,
+    message: impl ToString,
     errs: Vec<Error>,
     attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
 ) -> Error {
@@ -69,7 +69,7 @@ pub fn agg_err_with(
     attrs(&mut new_attrs);
     return Error(Box::new(Error_ {
         inner: Error_2::Full(FullError {
-            message: message,
+            message: message.to_string(),
             attrs: new_attrs,
             causes: errs,
         }),

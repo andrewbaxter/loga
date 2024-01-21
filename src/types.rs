@@ -12,6 +12,7 @@ use std::{
     fmt::{
         Display,
     },
+    mem::swap,
 };
 use crate::{
     DebugDisplay,
@@ -21,7 +22,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct FullError {
-    pub message: &'static str,
+    pub message: String,
     pub attrs: HashMap<&'static str, String>,
     pub causes: Vec<Error>,
 }
@@ -105,10 +106,10 @@ impl Error {
     }
 
     /// Return a new error adding a simple string message as a layer of context.
-    pub fn context(self, message: &'static str) -> Error {
+    pub fn context(self, message: impl ToString) -> Error {
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
-                message: message,
+                message: message.to_string(),
                 attrs: HashMap::new(),
                 causes: vec![self],
             }),
@@ -117,12 +118,16 @@ impl Error {
     }
 
     /// Return a new error adding a layer of context with a message and attributes.
-    pub fn context_with(self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+    pub fn context_with(
+        self,
+        message: impl ToString,
+        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
+    ) -> Error {
         let mut new_attrs = HashMap::new();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
-                message: message,
+                message: message.to_string(),
                 attrs: new_attrs,
                 causes: vec![self],
             }),
@@ -132,10 +137,10 @@ impl Error {
 
     /// Return a new error adding a layer of context including all attributes in the
     /// provided log along with the specified message.
-    pub fn log_context<F: Flags>(self, log: &Log<F>, message: &'static str) -> Error {
+    pub fn log_context<F: Flags>(self, log: &Log<F>, message: impl ToString) -> Error {
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
-                message: message,
+                message: message.to_string(),
                 attrs: log.attrs.clone(),
                 causes: vec![self],
             }),
@@ -150,14 +155,14 @@ impl Error {
     >(
         self,
         log: &Log<F>,
-        message: &'static str,
+        message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Error {
         let mut new_attrs = log.attrs.clone();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
-                message: message,
+                message: message.to_string(),
                 attrs: new_attrs,
                 causes: vec![self],
             }),
@@ -205,7 +210,7 @@ impl Display for Error {
                 text.push_str(&e);
             },
             Error_2::Full(e) => {
-                text.push_str(e.message);
+                text.push_str(&e.message);
                 for (k, v) in &e.attrs {
                     text.push_str(", ");
                     text.push_str(k);
@@ -310,13 +315,13 @@ impl<F: Flags> Log<F> {
 
     /// Log a message.  The message will only be rendered and output if any of the
     /// specified flags are set.
-    pub fn log(&self, flags: F, message: &'static str) {
+    pub fn log(&self, flags: F, message: impl ToString) {
         self.log_with(flags, message, ea!());
     }
 
     /// Log a message.  The attributes will only be evaluated and the message will only
     /// be rendered and output if any of the specified flags are set.
-    pub fn log_with(&self, flags: F, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
+    pub fn log_with(&self, flags: F, message: impl ToString, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
         let mask = self.flags.expect("Can't log because flags aren't set in this logger!");
         if !mask.intersects(flags) {
             return;
@@ -324,23 +329,39 @@ impl<F: Flags> Log<F> {
         self.log_err(flags, self.err_with(message, attrs));
     }
 
-    pub fn log_err(&self, flags: F, e: Error) {
+    pub fn log_err(&self, flags: F, mut e: Error) {
         let mask = self.flags.expect("Can't log because flags aren't set in this logger!");
         if !mask.intersects(flags) {
             return;
         }
         let style = flags.style();
+        match &mut e.0.inner {
+            Error_2::Simple(s) => {
+                e.0.inner = Error_2::Full(FullError {
+                    message: s.clone(),
+                    attrs: self.attrs.clone(),
+                    causes: vec![],
+                });
+            },
+            Error_2::Full(e) => {
+                let mut attrs = self.attrs.clone();
+                let mut attrs2 = HashMap::new();
+                swap(&mut attrs2, &mut e.attrs);
+                attrs.extend(attrs2);
+                e.attrs = attrs;
+            },
+        };
         let (head, body) = e.render();
         log(style.body_style, style.label_style, style.label, head, body);
     }
 
     /// Create a new error including the attributes in this logging context.
-    pub fn err(&self, message: &'static str) -> Error {
+    pub fn err(&self, message: impl ToString) -> Error {
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
-                message: message,
+                message: message.to_string(),
                 causes: vec![],
-                attrs: HashMap::new(),
+                attrs: self.attrs.clone(),
             }),
             incidental: vec![],
         }));
@@ -348,14 +369,46 @@ impl<F: Flags> Log<F> {
 
     /// Create a new error including the attributes in this logging context and merging
     /// additional attributes.
-    pub fn err_with(&self, message: &'static str, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
+    pub fn err_with(&self, message: impl ToString, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Error {
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
-                message: message,
+                message: message.to_string(),
                 causes: vec![],
                 attrs: new_attrs,
+            }),
+            incidental: vec![],
+        }));
+    }
+
+    /// Create an error from multiple errors, attaching the Log's attributes.
+    pub fn agg_err(&self, message: impl ToString, errs: Vec<Error>) -> Error {
+        return Error(Box::new(Error_ {
+            inner: Error_2::Full(FullError {
+                message: message.to_string(),
+                attrs: self.attrs.clone(),
+                causes: errs,
+            }),
+            incidental: vec![],
+        }));
+    }
+
+    /// Create an error from multiple errors, attaching the Log's attributes and
+    /// additional attributes.
+    pub fn agg_err_with(
+        &self,
+        message: impl ToString,
+        errs: Vec<Error>,
+        attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
+    ) -> Error {
+        let mut new_attrs = self.attrs.clone();
+        attrs(&mut new_attrs);
+        return Error(Box::new(Error_ {
+            inner: Error_2::Full(FullError {
+                message: message.to_string(),
+                attrs: new_attrs,
+                causes: errs,
             }),
             incidental: vec![],
         }));
