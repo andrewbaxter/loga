@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+};
 use crate::{
     types::{
         Error,
@@ -128,6 +130,11 @@ pub trait ResultContext<O> {
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Result<O, Error>;
 
+    /// If this is an error and the argument result is an error, attach the argument
+    /// result to this error as an incidental error. If this isn't an error and the
+    /// argument result is an error, return the argument result alone.
+    fn also<O2, E: Into<Error>>(self, r: Result<O2, E>) -> Result<O, Error>;
+
     // If the value is Err/None, consume it, logging it with the additional context
     // message.
     fn log<F: Flags>(self, log: &Log<F>, flags: F, message: &'static str);
@@ -145,7 +152,7 @@ pub trait ResultContext<O> {
     );
 }
 
-impl<O, T: Into<Error>> ResultContext<O> for Result<O, T> {
+impl<O, E: Into<Error>> ResultContext<O> for Result<O, E> {
     fn context(self, message: &'static str) -> Result<O, Error> {
         match self {
             Ok(x) => Ok(x),
@@ -182,6 +189,23 @@ impl<O, T: Into<Error>> ResultContext<O> for Result<O, T> {
         match self {
             Ok(x) => Ok(x),
             Err(e) => Err(e.stack_context_with(log, message, attrs)),
+        }
+    }
+
+    fn also<O2, E2: Into<Error>>(self, r: Result<O2, E2>) -> Result<O, Error> {
+        match self {
+            Ok(o) => match r {
+                Ok(_) => {
+                    return Ok(o);
+                },
+                Err(e2) => {
+                    return Err(e2.into());
+                },
+            },
+            Err(e) => match r {
+                Ok(_) => return Err(e.into()),
+                Err(e2) => return Err(e.into().also(e2.into())),
+            },
         }
     }
 
@@ -243,6 +267,23 @@ impl<O> ResultContext<O> for Option<O> {
         match self {
             Some(x) => Ok(x),
             None => Err(log.err_with(message, attrs)),
+        }
+    }
+
+    fn also<O2, E2: Into<Error>>(self, r: Result<O2, E2>) -> Result<O, Error> {
+        match self {
+            Some(o) => match r {
+                Ok(_) => {
+                    return Ok(o);
+                },
+                Err(e2) => {
+                    return Err(e2.into());
+                },
+            },
+            None => match r {
+                Ok(_) => return Err(err("No value")),
+                Err(e2) => return Err(err("No value").also(e2.into())),
+            },
         }
     }
 
