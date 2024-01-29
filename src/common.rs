@@ -1,4 +1,6 @@
-pub struct FlagsStyle {
+use std::hash::Hash;
+
+pub struct FlagStyle {
     /// Color to render the log message body;
     pub body_style: console::Style,
     /// Color to render the flag label;
@@ -9,9 +11,9 @@ pub struct FlagsStyle {
 
 /// This trait defines the flags value used for gating logging messages.  You
 /// should define a new bitflags type and then implement this on it.  See
-/// `StandardFlags` for an example.
-pub trait Flags: bitflags::Flags + Send + Sync + Copy + Eq {
-    fn style(self) -> FlagsStyle;
+/// `StandardFlag` for an example.
+pub trait Flag: Hash + Eq + Clone {
+    fn style(self) -> FlagStyle;
 }
 
 /// Turn key/values into a lambda for extending attributes, used in various log and

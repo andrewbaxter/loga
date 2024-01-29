@@ -13,13 +13,13 @@ pub use entry::{
     agg_err,
     agg_err_with,
     fatal,
-    StandardFlags,
+    StandardFlag,
     StandardLog,
 };
 pub use common::{
     DebugDisplay,
-    Flags,
-    FlagsStyle,
+    Flag,
+    FlagStyle,
 };
 pub use conversion::{
     ErrContext,
@@ -29,5 +29,4 @@ pub use conversion::{
 /// Re-exported dependencies used in interfaces, etc.
 pub mod republish {
     pub use console;
-    pub use bitflags;
 }

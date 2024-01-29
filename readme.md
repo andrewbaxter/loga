@@ -4,21 +4,18 @@ This crate handles provides interconnected, structured logging and error handlin
 
 ```rust
 use loga::{
-    common::StandardFlags,
+    StandardFlags,
     ea,
     ResultContext,
     ErrContext,
 };
 
-const WARN: StandardFlags = StandardFlags::WARN;
-const INFO: StandardFlags = StandardFlags::INFO;
-const DEBUG: StandardFlags = StandardFlags::DEBUG;
+const WARN: StandardFlags = StandardFlags::Warning;
+const INFO: StandardFlags = StandardFlags::Info;
 
 fn main1() -> Result<(), loga::Error> {
     // All errors stacked from this will have "system = main"
-    let log = &loga::Log::<StandardFlags>::new()
-        .with_flags(WARN | INFO)
-        .fork(ea!(system = "main"));
+    let log = &loga::Log::<StandardFlags>::new().with_flags(&[WARN, INFO]).fork(ea!(system = "main"));
 
     // Convert the error result to `loga::Error`, add all the logger's attributes, add
     // a message, and add additional attributes.
@@ -70,13 +67,13 @@ The errors are intended _only_ for human consumption. Any information that may n
 
 ## Flags
 
-Unlike traditional loggers which have a linear scale of levels, sometimes multiplied by different "loggers" or additional dimensions, this library uses a set of additive flags. If any of the flags in the log call are set in the flags provided when constructing the logger then the log message will be rendered, otherwise it will be skipped.
+Unlike traditional loggers which have a linear scale of levels, sometimes multiplied by different "loggers" or additional dimensions, this library uses a set of additive flags. If the flag in the log call is set in the flags provided when constructing the logger then the log message will be rendered, otherwise it will be skipped.
 
-To keep things simple you can use `StandardFlags` with `DEBUG`, `INFO`, `WARN`, etc. levels.
+To keep things simple you can use `StandardFlags` with `Debug`, `Info`, `Warning`, etc. levels.
 
-If you have multiple subsystems each with their own levels, you could for instance have `GC_DEBUG`, `GC_INFO`, `GC_WARN`, `HTTP_DEBUG`, `HTTP_INFO`, etc. This is hopefully a simple mechanism for allowing pinpoint log control.
+If you have multiple subsystems each with their own levels, you could for instance have `GcDebug`, `GcInfo`, `GcWarn`, `HttpDebug`, `HttpInfo`, etc. This is hopefully a simple mechanism for allowing pinpoint log control.
 
-Flags only affect logging, not errors.
+Flags only affect logging, not errors generation and manipulation.
 
 ## Usage tips
 

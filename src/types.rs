@@ -8,7 +8,10 @@ use textwrap::{
     Options,
 };
 use std::{
-    collections::HashMap,
+    collections::{
+        HashMap,
+        HashSet,
+    },
     fmt::{
         Display,
     },
@@ -17,7 +20,7 @@ use std::{
 use crate::{
     DebugDisplay,
     ea,
-    Flags,
+    Flag,
 };
 
 #[derive(Debug, Clone)]
@@ -137,7 +140,7 @@ impl Error {
 
     /// Return a new error adding a layer of context including all attributes in the
     /// provided log along with the specified message.
-    pub fn log_context<F: Flags>(self, log: &Log<F>, message: impl ToString) -> Error {
+    pub fn log_context<F: Flag>(self, log: &Log<F>, message: impl ToString) -> Error {
         return Error(Box::new(Error_ {
             inner: Error_2::Full(FullError {
                 message: message.to_string(),
@@ -151,7 +154,7 @@ impl Error {
     /// Return a new error adding a layer of context including all attributes in the
     /// provided log along with the specified message and new attributes.
     pub fn log_context_with<
-        F: Flags,
+        F: Flag,
     >(
         self,
         log: &Log<F>,
@@ -270,25 +273,25 @@ pub(crate) fn log(body_color: Style, level_color: Style, level_text: &str, head:
 /// objects. The two hardest things when programming, as they say - no need to make
 /// things harder.
 #[derive(Clone)]
-pub struct Log<F: Flags> {
+pub struct Log<F: Flag> {
     pub(crate) attrs: HashMap<&'static str, String>,
-    pub(crate) flags: Option<F>,
+    pub(crate) flags: Option<HashSet<F>>,
 }
 
-impl<F: Flags> Default for Log<F> {
+impl<F: Flag> Default for Log<F> {
     fn default() -> Self {
-        Self {
+        return Self {
             attrs: HashMap::new(),
             flags: None,
-        }
+        };
     }
 }
 
-impl<F: Flags> Log<F> {
+impl<F: Flag> Log<F> {
     /// Create a new logger (defaults to Debug level, change with `with_level`). You
     /// may want to alias this with your flag type of choice.
     pub fn new() -> Self {
-        return Log {
+        return Self {
             attrs: HashMap::new(),
             flags: None,
         };
@@ -299,42 +302,42 @@ impl<F: Flags> Log<F> {
     pub fn fork(&self, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Self {
         let mut new_attrs = self.attrs.clone();
         attrs(&mut new_attrs);
-        return Log {
+        return Self {
             attrs: new_attrs,
-            flags: self.flags,
+            flags: self.flags.clone(),
         };
     }
 
     /// Initialize or replace flags and return a new Log instance.
-    pub fn with_flags(self, flags: F) -> Self {
-        return Log {
+    pub fn with_flags(self, flags: &[F]) -> Self {
+        return Self {
             attrs: self.attrs,
-            flags: Some(flags),
+            flags: Some(flags.iter().cloned().collect()),
         };
     }
 
     /// Log a message.  The message will only be rendered and output if any of the
     /// specified flags are set.
-    pub fn log(&self, flags: F, message: impl ToString) {
-        self.log_with(flags, message, ea!());
+    pub fn log(&self, flag: F, message: impl ToString) {
+        self.log_with(flag, message, ea!());
     }
 
     /// Log a message.  The attributes will only be evaluated and the message will only
     /// be rendered and output if any of the specified flags are set.
-    pub fn log_with(&self, flags: F, message: impl ToString, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
-        let mask = self.flags.expect("Can't log because flags aren't set in this logger!");
-        if !mask.intersects(flags) {
+    pub fn log_with(&self, flag: F, message: impl ToString, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) {
+        let mask = self.flags.as_ref().expect("Can't log because flags aren't set in this logger!");
+        if !mask.contains(&flag) {
             return;
         }
-        self.log_err(flags, self.err_with(message, attrs));
+        self.log_err(flag, self.err_with(message, attrs));
     }
 
-    pub fn log_err(&self, flags: F, mut e: Error) {
-        let mask = self.flags.expect("Can't log because flags aren't set in this logger!");
-        if !mask.intersects(flags) {
+    pub fn log_err(&self, flag: F, mut e: Error) {
+        let mask = self.flags.as_ref().expect("Can't log because flags aren't set in this logger!");
+        if !mask.contains(&flag) {
             return;
         }
-        let style = flags.style();
+        let style = flag.style();
         match &mut e.0.inner {
             Error_2::Simple(s) => {
                 e.0.inner = Error_2::Full(FullError {

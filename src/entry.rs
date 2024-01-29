@@ -14,9 +14,9 @@ use crate::{
         Log,
     },
     common::{
-        Flags,
+        Flag,
     },
-    FlagsStyle,
+    FlagStyle,
 };
 
 /// Create a new error. If you want to inherit attributes from a logging context,
@@ -90,43 +90,40 @@ pub fn fatal(e: Error) -> ! {
     exit(1)
 }
 
-bitflags::bitflags!{
-    /// A basic set of flags if you don't want to define your own yet.
-    #[derive(PartialEq, Eq, Clone, Copy)] pub struct StandardFlags: u8 {
-        const ERROR = 1 << 0;
-        const WARN = 1 << 1;
-        const INFO = 1 << 2;
-        const DEBUG = 1 << 3;
-    }
+#[derive(Hash, PartialEq, Eq, Clone, Copy)]
+pub enum StandardFlag {
+    Error,
+    Warning,
+    Info,
+    Debug,
 }
 
-impl Flags for StandardFlags {
-    fn style(self) -> FlagsStyle {
-        match self.iter().next().unwrap() {
-            StandardFlags::DEBUG => FlagsStyle {
+impl Flag for StandardFlag {
+    fn style(self) -> FlagStyle {
+        match self {
+            StandardFlag::Debug => FlagStyle {
                 body_style: TextStyle::new().for_stderr().black().bright(),
                 label_style: TextStyle::new().for_stderr().black().bright(),
                 label: "DEBUG",
             },
-            StandardFlags::INFO => FlagsStyle {
+            StandardFlag::Info => FlagStyle {
                 body_style: TextStyle::new().for_stderr().black(),
                 label_style: TextStyle::new().for_stderr().black(),
                 label: "INFO",
             },
-            StandardFlags::WARN => FlagsStyle {
+            StandardFlag::Warning => FlagStyle {
                 body_style: TextStyle::new().for_stderr().black(),
                 label_style: TextStyle::new().for_stderr().yellow(),
                 label: "WARN",
             },
-            StandardFlags::ERROR => FlagsStyle {
+            StandardFlag::Error => FlagStyle {
                 body_style: TextStyle::new().for_stderr().black(),
                 label_style: TextStyle::new().for_stderr().red(),
                 label: "ERROR",
             },
-            _ => panic!(),
         }
     }
 }
 
 /// A logger using a preconfigured flag set.
-pub type StandardLog = Log<StandardFlags>;
+pub type StandardLog = Log<StandardFlag>;
