@@ -1,7 +1,6 @@
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub struct Level(pub(crate) i8);
 
-pub const NONE: Level = Level(0);
 pub const DEBUG: Level = Level(1);
 pub const INFO: Level = Level(2);
 pub const WARN: Level = Level(3);

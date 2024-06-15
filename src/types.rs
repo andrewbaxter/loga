@@ -3,8 +3,6 @@ use {
         ea,
         DebugDisplay,
         Level,
-        ERR,
-        NONE,
     },
     chrono::Local,
     console::{
@@ -289,7 +287,6 @@ pub(crate) struct Log_ {
     pub(crate) parent: Option<Log>,
     pub(crate) attrs: HashMap<&'static str, String>,
     pub(crate) log_from: Option<Level>,
-    pub(crate) max_level: Level,
 }
 
 impl Default for Log {
@@ -298,7 +295,6 @@ impl Default for Log {
             parent: None,
             attrs: HashMap::new(),
             log_from: None,
-            max_level: ERR,
         }));
     }
 }
@@ -311,12 +307,10 @@ impl Log {
     }
 
     pub fn new_root(log_from: Level) -> Self {
-        assert_ne!(log_from, NONE);
         return Self(Arc::new(Log_ {
             parent: None,
             attrs: HashMap::new(),
             log_from: Some(log_from),
-            max_level: ERR,
         }));
     }
 
@@ -329,19 +323,17 @@ impl Log {
             parent: Some(self.clone()),
             attrs: new_attrs,
             log_from: self.0.log_from,
-            max_level: self.0.max_level,
         }));
     }
 
-    /// Like `fork` but also reduces the maximum log level.
-    pub fn fork_with_max_level(&self, level: Level, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Self {
+    /// Like `fork` but also increase the minimum log level.
+    pub fn fork_with_log_from(&self, log_from: Level, attrs: impl Fn(&mut HashMap<&'static str, String>) -> ()) -> Self {
         let mut new_attrs = HashMap::new();
         attrs(&mut new_attrs);
         return Self(Arc::new(Log_ {
             parent: Some(self.clone()),
             attrs: new_attrs,
-            log_from: self.0.log_from,
-            max_level: self.0.max_level.min(level),
+            log_from: self.0.log_from.map(|x| x.max(log_from)),
         }));
     }
 
@@ -356,7 +348,6 @@ impl Log {
         let Some(log_from) = self.0.log_from else {
             return None;
         };
-        let level = Level(level.0 + (log_from.0 - ERR.0)).max(NONE);
         if level < log_from {
             return None;
         }

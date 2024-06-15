@@ -17,7 +17,6 @@ pub use entry::{
 pub use common::{
     DebugDisplay,
     Level,
-    NONE,
     DEBUG,
     INFO,
     WARN,
