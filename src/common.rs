@@ -1,20 +1,11 @@
-use std::hash::Hash;
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct Level(pub(crate) i8);
 
-pub struct FlagStyle {
-    /// Color to render the log message body;
-    pub body_style: console::Style,
-    /// Color to render the flag label;
-    pub label_style: console::Style,
-    /// Text for the log message flag label (ex: WARN, DEBUG, etc)
-    pub label: &'static str,
-}
-
-/// This trait defines the flags value used for gating logging messages.  You
-/// should define a new bitflags type and then implement this on it.  See
-/// `StandardFlag` for an example.
-pub trait Flag: Hash + Eq + Clone {
-    fn style(self) -> FlagStyle;
-}
+pub const NONE: Level = Level(0);
+pub const DEBUG: Level = Level(1);
+pub const INFO: Level = Level(2);
+pub const WARN: Level = Level(3);
+pub const ERR: Level = Level(4);
 
 /// Turn key/values into a lambda for extending attributes, used in various log and
 /// error functions.

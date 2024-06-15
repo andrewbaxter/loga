@@ -16,18 +16,14 @@ fn shutdown_server() -> Result<(), loga::Error> {
 }
 
 use loga::{
-    StandardFlags,
     ea,
     ResultContext,
-    ErrContext,
+    INFO,
 };
-
-const WARN: StandardFlags = StandardFlags::Warning;
-const INFO: StandardFlags = StandardFlags::Info;
 
 fn main1() -> Result<(), loga::Error> {
     // All errors stacked from this will have "system = main"
-    let log = &loga::Log::<StandardFlags>::new().with_flags(&[WARN, INFO]).fork(ea!(system = "main"));
+    let log = &loga::Log::new_root(INFO).fork(ea!(system = "main"));
 
     // Convert the error result to `loga::Error`, add all the logger's attributes, add
     // a message, and add additional attributes.

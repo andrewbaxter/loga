@@ -13,13 +13,15 @@ pub use entry::{
     agg_err,
     agg_err_with,
     fatal,
-    StandardFlag,
-    StandardLog,
 };
 pub use common::{
     DebugDisplay,
-    Flag,
-    FlagStyle,
+    Level,
+    NONE,
+    DEBUG,
+    INFO,
+    WARN,
+    ERR,
 };
 pub use conversion::{
     ErrContext,

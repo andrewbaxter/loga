@@ -9,10 +9,8 @@ use crate::{
     types::{
         Error,
         Error_,
-        Error_2,
-        FullError,
     },
-    Flag,
+    Level,
     Log,
 };
 
@@ -28,15 +26,13 @@ pub trait ErrContext {
 
     /// Add attributes from the log as well as a simple context string to an error,
     /// converting it to `loga::Error` in the process.
-    fn stack_context<F: Flag>(self, log: &Log<F>, message: impl ToString) -> Error;
+    fn stack_context(self, log: &Log, message: impl ToString) -> Error;
 
     /// Add attributes from the log as well as the specified attributes and a simple
     /// context string to an error, converting it to `loga::Error` in the process.
-    fn stack_context_with<
-        F: Flag,
-    >(
+    fn stack_context_with(
         self,
-        log: &Log<F>,
+        log: &Log,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Error;
@@ -45,11 +41,10 @@ pub trait ErrContext {
 impl<T: Into<Error>> ErrContext for T {
     fn context(self, message: impl ToString) -> Error {
         return Error(Box::new(Error_ {
-            inner: Error_2::Full(FullError {
-                message: message.to_string(),
-                attrs: HashMap::new(),
-                causes: vec![self.into()],
-            }),
+            message: message.to_string(),
+            attrs: HashMap::new(),
+            context: None,
+            causes: vec![self.into()],
             incidental: vec![],
         }));
     }
@@ -62,42 +57,37 @@ impl<T: Into<Error>> ErrContext for T {
         let mut new_attrs = HashMap::new();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
-            inner: Error_2::Full(FullError {
-                message: message.to_string(),
-                attrs: new_attrs,
-                causes: vec![self.into()],
-            }),
+            message: message.to_string(),
+            attrs: new_attrs,
+            context: None,
+            causes: vec![self.into()],
             incidental: vec![],
         }));
     }
 
-    fn stack_context<F: Flag>(self, log: &Log<F>, message: impl ToString) -> Error {
+    fn stack_context(self, log: &Log, message: impl ToString) -> Error {
         return Error(Box::new(Error_ {
-            inner: Error_2::Full(FullError {
-                message: message.to_string(),
-                attrs: log.attrs.clone(),
-                causes: vec![self.into()],
-            }),
+            message: message.to_string(),
+            attrs: HashMap::new(),
+            context: Some(log.clone()),
+            causes: vec![self.into()],
             incidental: vec![],
         }));
     }
 
-    fn stack_context_with<
-        F: Flag,
-    >(
+    fn stack_context_with(
         self,
-        log: &Log<F>,
+        log: &Log,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Error {
-        let mut new_attrs = log.attrs.clone();
+        let mut new_attrs = HashMap::new();
         attrs(&mut new_attrs);
         return Error(Box::new(Error_ {
-            inner: Error_2::Full(FullError {
-                message: message.to_string(),
-                attrs: new_attrs,
-                causes: vec![self.into()],
-            }),
+            message: message.to_string(),
+            attrs: new_attrs,
+            context: Some(log.clone()),
+            causes: vec![self.into()],
             incidental: vec![],
         }));
     }
@@ -120,16 +110,14 @@ pub trait ResultContext<O> {
 
     /// If the value is Err/None, add attributes from the log as well as a simple
     /// context string to an error, converting it to `loga::Error` in the process.
-    fn stack_context<F: Flag>(self, log: &Log<F>, message: impl ToString) -> Result<O, Error>;
+    fn stack_context(self, log: &Log, message: impl ToString) -> Result<O, Error>;
 
     /// If the value is Err/None, add attributes from the log as well as the specified
     /// attributes and a simple context string to an error, converting it to
     /// `loga::Error` in the process.
-    fn stack_context_with<
-        F: Flag,
-    >(
+    fn stack_context_with(
         self,
-        log: &Log<F>,
+        log: &Log,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Result<O, Error>;
@@ -141,16 +129,14 @@ pub trait ResultContext<O> {
 
     // If the value is Err/None, consume it, logging it with the additional context
     // message.
-    fn log<F: Flag>(self, log: &Log<F>, flags: F, message: impl ToString);
+    fn log(self, log: &Log, level: Level, message: impl ToString);
 
     // If the value is Err/None, consume it, logging it with the additional context
     // message and attributes.
-    fn log_with<
-        F: Flag,
-    >(
+    fn log_with(
         self,
-        log: &Log<F>,
-        flags: F,
+        log: &Log,
+        level: Level,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     );
@@ -175,18 +161,16 @@ impl<O, E: Into<Error>> ResultContext<O> for Result<O, E> {
         }
     }
 
-    fn stack_context<F: Flag>(self, log: &Log<F>, message: impl ToString) -> Result<O, Error> {
+    fn stack_context(self, log: &Log, message: impl ToString) -> Result<O, Error> {
         match self {
             Ok(x) => Ok(x),
             Err(e) => Err(e.stack_context(log, message)),
         }
     }
 
-    fn stack_context_with<
-        F: Flag,
-    >(
+    fn stack_context_with(
         self,
-        log: &Log<F>,
+        log: &Log,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Result<O, Error> {
@@ -213,23 +197,21 @@ impl<O, E: Into<Error>> ResultContext<O> for Result<O, E> {
         }
     }
 
-    fn log<F: Flag>(self, log: &Log<F>, flags: F, message: impl ToString) {
+    fn log(self, log: &Log, level: Level, message: impl ToString) {
         if let Err(e) = self.context(message) {
-            log.log_err(flags, e);
+            log.log_err(level, e);
         }
     }
 
-    fn log_with<
-        F: Flag,
-    >(
+    fn log_with(
         self,
-        log: &Log<F>,
-        flags: F,
+        log: &Log,
+        level: Level,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) {
         if let Err(e) = self.context_with(message, attrs) {
-            log.log_err(flags, e);
+            log.log_err(level, e);
         }
     }
 }
@@ -253,18 +235,16 @@ impl<O> ResultContext<O> for Option<O> {
         }
     }
 
-    fn stack_context<F: Flag>(self, log: &Log<F>, message: impl ToString) -> Result<O, Error> {
+    fn stack_context(self, log: &Log, message: impl ToString) -> Result<O, Error> {
         match self {
             Some(x) => Ok(x),
             None => Err(log.err(message)),
         }
     }
 
-    fn stack_context_with<
-        F: Flag,
-    >(
+    fn stack_context_with(
         self,
-        log: &Log<F>,
+        log: &Log,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) -> Result<O, Error> {
@@ -291,23 +271,21 @@ impl<O> ResultContext<O> for Option<O> {
         }
     }
 
-    fn log<F: Flag>(self, log: &Log<F>, flags: F, message: impl ToString) {
+    fn log(self, log: &Log, level: Level, message: impl ToString) {
         if self.is_none() {
-            log.log_err(flags, err("No value").context(message));
+            log.log_err(level, err("No value").context(message));
         }
     }
 
-    fn log_with<
-        F: Flag,
-    >(
+    fn log_with(
         self,
-        log: &Log<F>,
-        flags: F,
+        log: &Log,
+        level: Level,
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     ) {
         if self.is_none() {
-            log.log_err(flags, err("No value").context_with(message, attrs));
+            log.log_err(level, err("No value").context_with(message, attrs));
         }
     }
 }
