@@ -19,7 +19,7 @@ pub fn err(message: impl ToString) -> Error {
     return Error(Box::new(Error_ {
         message: message.to_string(),
         attrs: HashMap::new(),
-        context: None,
+        context: vec![],
         causes: vec![],
         incidental: vec![],
     }));
@@ -33,7 +33,7 @@ pub fn err_with(message: impl ToString, attrs: impl Fn(&mut HashMap<&'static str
     return Error(Box::new(Error_ {
         message: message.to_string(),
         attrs: new_attrs,
-        context: None,
+        context: vec![],
         causes: vec![],
         incidental: vec![],
     }));
@@ -44,7 +44,7 @@ pub fn agg_err(message: impl ToString, errs: Vec<Error>) -> Error {
     return Error(Box::new(Error_ {
         message: message.to_string(),
         attrs: HashMap::new(),
-        context: None,
+        context: vec![],
         causes: errs,
         incidental: vec![],
     }));
@@ -61,7 +61,7 @@ pub fn agg_err_with(
     return Error(Box::new(Error_ {
         message: message.to_string(),
         attrs: new_attrs,
-        context: None,
+        context: vec![],
         causes: errs,
         incidental: vec![],
     }));

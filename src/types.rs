@@ -28,7 +28,7 @@ use {
 pub(crate) struct Error_ {
     pub message: String,
     pub attrs: HashMap<&'static str, String>,
-    pub context: Option<Log>,
+    pub context: Vec<Log>,
     pub causes: Vec<Error>,
     /// Errors that occur during error handling
     pub(crate) incidental: Vec<Error>,
@@ -45,7 +45,7 @@ pub(crate) struct RenderNodeBranch<'a> {
 }
 
 pub(crate) enum RenderNode<'a> {
-    Leaf {
+    KVLeaf {
         key: &'a str,
         value: &'a String,
     },
@@ -57,7 +57,7 @@ impl Error {
         return Error(Box::new(Error_ {
             message: x.to_string(),
             attrs: HashMap::new(),
-            context: None,
+            context: vec![],
             causes: vec![],
             incidental: vec![],
         }));
@@ -80,32 +80,34 @@ impl Error {
             if !seen_attrs.insert(*a.0) {
                 continue;
             }
-            children.push(RenderNode::Leaf {
+            children.push(RenderNode::KVLeaf {
                 key: a.0,
                 value: a.1,
             })
         }
-        let mut at = self.0.context.as_ref();
-        while let Some(at1) = at {
-            let addr = at1.0.as_ref() as *const Log_;
-            if seen_contexts.contains(&addr) {
-                break;
-            }
-            for a in &at1.0.attrs {
-                if !seen_attrs.insert(*a.0) {
-                    continue;
+        for context in &self.0.context {
+            let mut at = Some(context);
+            while let Some(at1) = at {
+                let addr = at1.0.as_ref() as *const Log_;
+                if seen_contexts.contains(&addr) {
+                    break;
                 }
-                children.push(RenderNode::Leaf {
-                    key: a.0,
-                    value: a.1,
-                })
+                for a in &at1.0.attrs {
+                    if !seen_attrs.insert(*a.0) {
+                        continue;
+                    }
+                    children.push(RenderNode::KVLeaf {
+                        key: a.0,
+                        value: a.1,
+                    })
+                }
+                sub_seen_contexts.insert(at1.0.as_ref());
+                at = at1.0.parent.as_ref();
             }
-            sub_seen_contexts.insert(at1.0.as_ref());
-            at = at1.0.parent.as_ref();
         }
         if self.0.causes.len() > 0 {
             children.push(RenderNode::Branch(RenderNodeBranch {
-                title: "Caused by".into(),
+                title: "Caused by:".into(),
                 children: self
                     .0
                     .causes
@@ -116,7 +118,7 @@ impl Error {
         }
         if self.0.incidental.len() > 0 {
             children.push(RenderNode::Branch(RenderNodeBranch {
-                title: "Incidentally".into(),
+                title: "Incidentally:".into(),
                 children: self
                     .0
                     .incidental
@@ -136,7 +138,7 @@ impl Error {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: HashMap::new(),
-            context: None,
+            context: vec![],
             causes: vec![self],
             incidental: vec![],
         }));
@@ -153,7 +155,7 @@ impl Error {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: new_attrs,
-            context: None,
+            context: vec![],
             causes: vec![self],
             incidental: vec![],
         }));
@@ -165,7 +167,7 @@ impl Error {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: HashMap::new(),
-            context: Some(log.clone()),
+            context: vec![log.clone()],
             causes: vec![self],
             incidental: vec![],
         }));
@@ -184,7 +186,7 @@ impl Error {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: new_attrs,
-            context: Some(log.clone()),
+            context: vec![log.clone()],
             causes: vec![self],
             incidental: vec![],
         }));
@@ -197,7 +199,7 @@ impl Display for Error {
         let mut stack = vec![(true, 0, &node)];
         while let Some((descending, index, top)) = stack.pop() {
             match top {
-                RenderNode::Leaf { key, value } => {
+                RenderNode::KVLeaf { key, value } => {
                     if index > 0 {
                         f.write_str(",")?;
                     }
@@ -238,7 +240,7 @@ pub(crate) fn log(body_color: Style, level_color: Style, level_text: &str, node:
     while let Some((indent_count, top)) = stack.pop() {
         let indent = "  ".repeat(indent_count);
         match top {
-            RenderNode::Leaf { key, value } => {
+            RenderNode::KVLeaf { key, value } => {
                 let key = format!("- {} = ", key);
                 for line in wrap(
                     &value,
@@ -252,7 +254,7 @@ pub(crate) fn log(body_color: Style, level_color: Style, level_text: &str, node:
             },
             RenderNode::Branch(b) => {
                 for line in wrap(
-                    &format!("{}:", b.title),
+                    &format!("{}", b.title),
                     Options::with_termwidth().initial_indent(&indent).subsequent_indent(&indent),
                 ) {
                     out.push_str(&highlight_style.apply_to(line).to_string());
@@ -273,12 +275,6 @@ pub(crate) fn log(body_color: Style, level_color: Style, level_text: &str, node:
 
 /// A store of context with methods for logging and creating errors expressing that
 /// context.
-///
-/// Unnecessary detail: This is called "Log" because this object will take the
-/// place of a log or logger in most code and thus is unlikely to overlap.  Naming
-/// it "Context" or similar would possibly conflict with other domains' "context"
-/// objects. The two hardest things when programming, as they say - no need to make
-/// things harder.
 #[derive(Clone, Debug)]
 pub struct Log(Arc<Log_>);
 
@@ -398,18 +394,8 @@ impl Log {
             },
             _ => unreachable!(),
         }
-        let mut seen_contexts = HashSet::new();
-        let mut at = Some(self);
-        while let Some(at1) = at {
-            seen_contexts.insert(at1.0.as_ref() as *const Log_);
-            at = at1.0.parent.as_ref();
-        }
-        if e.0.context.is_none() {
-            e.0.context = Some(self.clone());
-        } else {
-            e = e.stack_context(self, "Context");
-        }
-        log(body_style, label_style, label, e.build_render_nodes(&seen_contexts));
+        e.0.context.push(self.clone());
+        log(body_style, label_style, label, e.build_render_nodes(&HashSet::new()));
     }
 
     /// Create a new error including the attributes in this logging context.
@@ -417,7 +403,7 @@ impl Log {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: HashMap::new(),
-            context: Some(self.clone()),
+            context: vec![self.clone()],
             causes: vec![],
             incidental: vec![],
         }));
@@ -431,7 +417,7 @@ impl Log {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: new_attrs,
-            context: Some(self.clone()),
+            context: vec![self.clone()],
             causes: vec![],
             incidental: vec![],
         }));
@@ -442,7 +428,7 @@ impl Log {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: HashMap::new(),
-            context: Some(self.clone()),
+            context: vec![self.clone()],
             causes: errs,
             incidental: vec![],
         }));
@@ -461,7 +447,7 @@ impl Log {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: new_attrs,
-            context: Some(self.clone()),
+            context: vec![self.clone()],
             causes: errs,
             incidental: vec![],
         }));

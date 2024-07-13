@@ -43,7 +43,7 @@ impl<T: Into<Error>> ErrContext for T {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: HashMap::new(),
-            context: None,
+            context: vec![],
             causes: vec![self.into()],
             incidental: vec![],
         }));
@@ -59,7 +59,7 @@ impl<T: Into<Error>> ErrContext for T {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: new_attrs,
-            context: None,
+            context: vec![],
             causes: vec![self.into()],
             incidental: vec![],
         }));
@@ -69,7 +69,7 @@ impl<T: Into<Error>> ErrContext for T {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: HashMap::new(),
-            context: Some(log.clone()),
+            context: vec![log.clone()],
             causes: vec![self.into()],
             incidental: vec![],
         }));
@@ -86,7 +86,7 @@ impl<T: Into<Error>> ErrContext for T {
         return Error(Box::new(Error_ {
             message: message.to_string(),
             attrs: new_attrs,
-            context: Some(log.clone()),
+            context: vec![log.clone()],
             causes: vec![self.into()],
             incidental: vec![],
         }));
