@@ -127,12 +127,12 @@ pub trait ResultContext<O> {
     /// argument result is an error, return the argument result alone.
     fn also<O2, E: Into<Error>>(self, r: Result<O2, E>) -> Result<O, Error>;
 
-    // If the value is Err/None, consume it, logging it with the additional context
-    // message.
+    /// If the value is Err/None, consume it, logging it with the additional context
+    /// message.
     fn log(self, log: &Log, level: Level, message: impl ToString);
 
-    // If the value is Err/None, consume it, logging it with the additional context
-    // message and attributes.
+    /// If the value is Err/None, consume it, logging it with the additional context
+    /// message and attributes.
     fn log_with(
         self,
         log: &Log,
@@ -140,6 +140,12 @@ pub trait ResultContext<O> {
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     );
+
+    /// Ignore a result entirely. This should generally not be done, but it's safer
+    /// than doing `_ =` because this only ignores errors and will prevent you from
+    /// accidentally ignoring futures or other critical values if you're missing a
+    /// conversion somewhere.
+    fn ignore(self);
 }
 
 impl<O, E: Into<Error>> ResultContext<O> for Result<O, E> {
@@ -214,6 +220,10 @@ impl<O, E: Into<Error>> ResultContext<O> for Result<O, E> {
             log.log_err(level, e);
         }
     }
+
+    fn ignore(self) {
+        _ = self;
+    }
 }
 
 impl<O> ResultContext<O> for Option<O> {
@@ -287,5 +297,9 @@ impl<O> ResultContext<O> for Option<O> {
         if self.is_none() {
             log.log_err(level, err("No value").context_with(message, attrs));
         }
+    }
+
+    fn ignore(self) {
+        _ = self;
     }
 }
