@@ -8,6 +8,6 @@ readme = "readme.md"
 repository = "https://github.com/andrewbaxter/loga"
 
 [dependencies]
-chrono = "0.4.31"
-console = "0.15.8"
-textwrap = { version = "0.16.0", features = ["terminal_size"] }
+chrono = "0.4"
+console = "0.15"
+textwrap = { version = "0.16", features = ["terminal_size"] }

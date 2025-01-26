@@ -225,9 +225,6 @@ impl Display for Error {
 
 impl<T: std::error::Error> From<T> for Error {
     fn from(value: T) -> Self {
-        #[cfg(debug_assertions)]
-        return Error::from(value.dbg_str());
-        #[cfg(not(debug_assertions))]
         return Error::from(value);
     }
 }
