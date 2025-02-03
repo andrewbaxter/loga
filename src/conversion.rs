@@ -140,12 +140,6 @@ pub trait ResultContext<O> {
         message: impl ToString,
         attrs: impl Fn(&mut HashMap<&'static str, String>) -> (),
     );
-
-    /// Ignore a result entirely. This should generally not be done, but it's safer
-    /// than doing `_ =` because this only ignores errors and will prevent you from
-    /// accidentally ignoring futures or other critical values if you're missing a
-    /// conversion somewhere.
-    fn ignore(self);
 }
 
 impl<O, E: Into<Error>> ResultContext<O> for Result<O, E> {
@@ -219,10 +213,6 @@ impl<O, E: Into<Error>> ResultContext<O> for Result<O, E> {
         if let Err(e) = self.context_with(message, attrs) {
             log.log_err(level, e);
         }
-    }
-
-    fn ignore(self) {
-        _ = self;
     }
 }
 
@@ -298,7 +288,17 @@ impl<O> ResultContext<O> for Option<O> {
             log.log_err(level, err("No value").context_with(message, attrs));
         }
     }
+}
 
+pub trait ResultIgnore {
+    /// Ignore a result entirely. This should generally not be done, but it's safer
+    /// than doing `_ =` because this only ignores errors and will prevent you from
+    /// accidentally ignoring futures or other critical values if you're missing a
+    /// conversion somewhere.
+    fn ignore(self);
+}
+
+impl<T, E> ResultIgnore for Result<T, E> {
     fn ignore(self) {
         _ = self;
     }

@@ -1,7 +1,6 @@
 use {
     crate::{
         ea,
-        DebugDisplay,
         Level,
     },
     chrono::Local,
